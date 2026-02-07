@@ -2,42 +2,193 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<title>Barcode Format Inspection</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barcode Format QC</title>
+
+<script src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <style>
 body {
-    font-family: Arial;
-    background: #f2f2f2;
-    text-align: center;
+  margin:0;
+  background:black;
+  overflow:hidden;
+  font-family:Arial, sans-serif;
 }
 
 video, canvas {
-    width: 95%;
-    max-width: 900px;
-    border: 2px solid #333;
-    margin-top: 10px;
+  position:absolute;
+  top:0; left:0;
+  width:100vw;
+  height:100vh;
+  object-fit:cover;
 }
 
-#result {
-    font-size: 36px;
-    font-weight: bold;
-    margin-top: 15px;
+#a4 {
+  position:absolute;
+  width:70vw;
+  height:99vw;       /* สัดส่วน A4 */
+  border:4px dashed yellow;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
 }
 
-.pass { color: green; }
-.fail { color: red; }
+#status {
+  position:absolute;
+  bottom:20px;
+  left:50%;
+  transform:translateX(-50%);
+  font-size:28px;
+  padding:10px 20px;
+  border-radius:10px;
+  background:rgba(0,0,0,0.7);
+  color:white;
+}
+
+.pass { color:#00ff00; }
+.fail { color:#ff3333; }
+
+button {
+  font-size:18px;
+  padding:8px 16px;
+  border:none;
+  border-radius:10px;
+}
+
+#btnMaster {
+  position:absolute;
+  top:20px;
+  left:50%;
+  transform:translateX(-50%);
+}
+
+#btnSwitch {
+  position:absolute;
+  top:70px;
+  left:50%;
+  transform:translateX(-50%);
+}
 </style>
 </head>
 
 <body>
 
-<h2>ตรวจสอบ FORMAT BARCODE (เทียบ MASTER)</h2>
-
 <video id="video" autoplay playsinline></video>
 <canvas id="canvas"></canvas>
 
-<div id="result">กำลังตรวจสอบ...</div>
+<div id="a4"></div>
 
-<script src="script.js"></script>
+<button id="btnMaster">📸 ถ่าย MASTER</button>
+<button id="btnSwitch">🔄 สลับกล้อง</button>
+
+<div id="status">รอการตั้งค่า MASTER</div>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const statusBox = document.getElementById("status");
+const btnMaster = document.getElementById("btnMaster");
+const btnSwitch = document.getElementById("btnSwitch");
+
+// ----------------- กล้อง -----------------
+let currentFacing = "environment";
+let currentStream = null;
+
+function startCamera() {
+  if (currentStream) {
+    currentStream.getTracks().forEach(t => t.stop());
+  }
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: currentFacing },
+    audio: false
+  }).then(stream => {
+    currentStream = stream;
+    video.srcObject = stream;
+  }).catch(() => {
+    alert("ไม่สามารถเปิดกล้องได้");
+  });
+}
+
+startCamera();
+
+btnSwitch.onclick = () => {
+  currentFacing = currentFacing === "environment" ? "user" : "environment";
+  startCamera();
+};
+
+// ----------------- Master -----------------
+let master = JSON.parse(localStorage.getItem("MASTER_DATA"));
+
+btnMaster.onclick = () => {
+  captureMaster();
+};
+
+function captureMaster() {
+  drawFrame();
+
+  let src = cv.imread(canvas);
+  let gray = new cv.Mat();
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+  let thresh = new cv.Mat();
+  cv.threshold(gray, thresh, 0, 255,
+    cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+  let inkPixels = cv.countNonZero(thresh);
+  let inkRatio = inkPixels / (thresh.rows * thresh.cols);
+
+  master = {
+    inkRatio: inkRatio
+  };
+
+  localStorage.setItem("MASTER_DATA", JSON.stringify(master));
+
+  statusBox.textContent = "✅ บันทึก MASTER แล้ว";
+  statusBox.className = "pass";
+
+  src.delete(); gray.delete(); thresh.delete();
+}
+
+// ----------------- วิเคราะห์ -----------------
+function drawFrame() {
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+}
+
+function analyze() {
+  if (!master || video.videoWidth === 0) return;
+
+  drawFrame();
+
+  let src = cv.imread(canvas);
+  let gray = new cv.Mat();
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+  let thresh = new cv.Mat();
+  cv.threshold(gray, thresh, 0, 255,
+    cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+  let inkPixels = cv.countNonZero(thresh);
+  let inkRatio = inkPixels / (thresh.rows * thresh.cols);
+
+  if (inkRatio < master.inkRatio * 0.9) {
+    statusBox.textContent = "❌ FAIL : หมึกจาง / เส้นหาย";
+    statusBox.className = "fail";
+  } else {
+    statusBox.textContent = "✅ PASS";
+    statusBox.className = "pass";
+  }
+
+  src.delete(); gray.delete(); thresh.delete();
+}
+
+// ตรวจทุก 0.5 วินาที
+setInterval(analyze, 500);
+</script>
+
 </body>
 </html>
