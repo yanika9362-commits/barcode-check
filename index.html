@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Barcode Format Inspection</title>
+
+<style>
+body {
+    font-family: Arial;
+    background: #f2f2f2;
+    text-align: center;
+}
+
+video, canvas {
+    width: 95%;
+    max-width: 900px;
+    border: 2px solid #333;
+    margin-top: 10px;
+}
+
+#result {
+    font-size: 36px;
+    font-weight: bold;
+    margin-top: 15px;
+}
+
+.pass { color: green; }
+.fail { color: red; }
+</style>
+</head>
+
+<body>
+
+<h2>ตรวจสอบ FORMAT BARCODE (เทียบ MASTER)</h2>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
+
+<div id="result">กำลังตรวจสอบ...</div>
+
+<script src="script.js"></script>
+</body>
+</html>
